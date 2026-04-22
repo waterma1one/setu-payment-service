@@ -1,0 +1,191 @@
+{
+  "info": {
+    "name": "Setu Payment Event Service",
+    "_postman_id": "2f992087-83d2-4f92-9c5c-d792fe16d001",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://api-production-e564.up.railway.app",
+      "description": "Replace with the deployed Railway URL (or http://localhost:8000 for local)"
+    }
+  ],
+  "item": [
+    {
+      "name": "Events",
+      "item": [
+        {
+          "name": "Ingest Event - payment_initiated",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/events",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event_id\": \"b768e3a7-9eb3-4603-b21c-a54cc95661bc\",\n  \"event_type\": \"payment_initiated\",\n  \"transaction_id\": \"2f86e94c-239c-4302-9874-75f28e3474ee\",\n  \"merchant_id\": \"merchant_2\",\n  \"merchant_name\": \"FreshBasket\",\n  \"amount\": 15248.29,\n  \"currency\": \"INR\",\n  \"timestamp\": \"2026-01-08T12:11:58.085567+00:00\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Ingest Event - duplicate (idempotency check)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/events",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event_id\": \"b768e3a7-9eb3-4603-b21c-a54cc95661bc\",\n  \"event_type\": \"payment_initiated\",\n  \"transaction_id\": \"2f86e94c-239c-4302-9874-75f28e3474ee\",\n  \"merchant_id\": \"merchant_2\",\n  \"merchant_name\": \"FreshBasket\",\n  \"amount\": 15248.29,\n  \"currency\": \"INR\",\n  \"timestamp\": \"2026-01-08T12:11:58.085567+00:00\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Ingest Event - future timestamp (should 422)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/events",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event_id\": \"ffffffff-ffff-ffff-ffff-ffffffffffff\",\n  \"event_type\": \"payment_initiated\",\n  \"transaction_id\": \"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\",\n  \"merchant_id\": \"merchant_1\",\n  \"merchant_name\": \"TestMerchant\",\n  \"amount\": 100.00,\n  \"currency\": \"INR\",\n  \"timestamp\": \"2099-12-31T00:00:00+00:00\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Transactions",
+      "item": [
+        {
+          "name": "List Transactions - default",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/transactions?per_page=20&page=1&sort_by=created_at&sort_order=desc"
+          }
+        },
+        {
+          "name": "List Transactions - filter by merchant",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/transactions?merchant_id=merchant_1&per_page=20"
+          }
+        },
+        {
+          "name": "List Transactions - filter by status=failed",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/transactions?status=failed&per_page=20"
+          }
+        },
+        {
+          "name": "List Transactions - filter by status=settled",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/transactions?status=settled&per_page=20"
+          }
+        },
+        {
+          "name": "List Transactions - filter by date range",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/transactions?start_date=2026-01-01T00:00:00Z&end_date=2026-01-31T23:59:59Z&per_page=20"
+          }
+        },
+        {
+          "name": "List Transactions - sort by amount desc",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/transactions?sort_by=amount&sort_order=desc&per_page=10"
+          }
+        },
+        {
+          "name": "Transaction Detail",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/transactions/2f86e94c-239c-4302-9874-75f28e3474ee"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reconciliation",
+      "item": [
+        {
+          "name": "Summary - group by merchant",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/reconciliation/summary?group_by=merchant"
+          }
+        },
+        {
+          "name": "Summary - group by date",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/reconciliation/summary?group_by=date"
+          }
+        },
+        {
+          "name": "Summary - group by status",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/reconciliation/summary?group_by=status"
+          }
+        },
+        {
+          "name": "Summary - merchant with date range",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/reconciliation/summary?group_by=merchant&start_date=2026-01-01T00:00:00Z&end_date=2026-01-31T23:59:59Z"
+          }
+        },
+        {
+          "name": "Discrepancies - all types",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/reconciliation/discrepancies?page=1&per_page=20"
+          }
+        },
+        {
+          "name": "Discrepancies - settled_after_failure",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/reconciliation/discrepancies?type=settled_after_failure&per_page=20"
+          }
+        },
+        {
+          "name": "Discrepancies - processed_not_settled",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/reconciliation/discrepancies?type=processed_not_settled&per_page=20"
+          }
+        },
+        {
+          "name": "Discrepancies - conflicting_state_transition",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/reconciliation/discrepancies?type=conflicting_state_transition&per_page=20"
+          }
+        },
+        {
+          "name": "Discrepancies - filter by merchant",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/reconciliation/discrepancies?merchant_id=merchant_1&per_page=20"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/health"
+          }
+        }
+      ]
+    }
+  ]
+}
