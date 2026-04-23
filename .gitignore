@@ -10,3 +10,8 @@ htmlcov/
 alembic/versions/__pycache__/
 sample_events_source.json
 *.egg-info/
+*.cover
+coverage.json
+coverage.xml
+.firecrawl/
+*.pdf

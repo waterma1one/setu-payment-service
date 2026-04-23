@@ -28,8 +28,8 @@ Success response (`ingestion_status: "accepted"`):
 {
   "ingestion_status": "accepted",
   "transaction_id": "2f86e94c-239c-4302-9874-75f28e3474ee",
-  "payment_status": "INITIATED",
-  "settlement_status": "PENDING",
+  "payment_status": "initiated",
+  "settlement_status": "pending",
   "status": "initiated",
   "discrepancy_type": null
 }
@@ -40,8 +40,8 @@ Duplicate response (same `event_id`, no state change):
 {
   "ingestion_status": "duplicate",
   "transaction_id": "2f86e94c-239c-4302-9874-75f28e3474ee",
-  "payment_status": "INITIATED",
-  "settlement_status": "PENDING",
+  "payment_status": "initiated",
+  "settlement_status": "pending",
   "status": "initiated",
   "discrepancy_type": null
 }
@@ -64,8 +64,8 @@ Response:
       "transaction_id": "2f86e94c-239c-4302-9874-75f28e3474ee",
       "amount": "15248.29",
       "currency": "INR",
-      "payment_status": "FAILED",
-      "settlement_status": "PENDING",
+      "payment_status": "failed",
+      "settlement_status": "pending",
       "status": "failed",
       "discrepancy_type": null,
       "created_at": "2026-01-08T12:11:58.085567+00:00",
@@ -91,8 +91,8 @@ Returns transaction details, merchant details, and ordered event timeline.
     "transaction_id": "2f86e94c-239c-4302-9874-75f28e3474ee",
     "amount": "15248.29",
     "currency": "INR",
-    "payment_status": "FAILED",
-    "settlement_status": "PENDING",
+    "payment_status": "failed",
+    "settlement_status": "pending",
     "status": "failed",
     "discrepancy_type": null,
     "created_at": "2026-01-08T12:11:58.085567+00:00",
@@ -167,8 +167,8 @@ Response:
       "merchant_name": "QuickPay",
       "amount": "8500.00",
       "currency": "INR",
-      "payment_status": "FAILED",
-      "settlement_status": "SETTLED",
+      "payment_status": "failed",
+      "settlement_status": "settled",
       "status": "failed",
       "discrepancy_type": "settled_after_failure",
       "description": "Settlement recorded for a failed payment.",

@@ -33,3 +33,7 @@ include = ["app*"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 
+[tool.coverage.run]
+source = ["app"]
+concurrency = ["greenlet", "thread"]
+

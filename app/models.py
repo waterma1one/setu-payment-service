@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from enum import Enum
 from typing import Optional
 
@@ -50,7 +51,7 @@ class Transaction(Base):
     merchant_id: Mapped[str] = mapped_column(
         String(64), ForeignKey("merchants.merchant_id"), nullable=False
     )
-    amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
     payment_status: Mapped[PaymentStatus] = mapped_column(
         SqlEnum(PaymentStatus), nullable=False
@@ -86,7 +87,7 @@ class Event(Base):
     )
     merchant_id: Mapped[str] = mapped_column(String(64), nullable=False)
     event_type: Mapped[EventType] = mapped_column(SqlEnum(EventType), nullable=False)
-    amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
     event_timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

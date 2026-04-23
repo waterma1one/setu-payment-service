@@ -123,5 +123,5 @@ async def health(session: AsyncSession = Depends(get_session)) -> HealthResponse
             event_count=event_count,
             transaction_count=transaction_count,
         )
-    except Exception as exc:
+    except Exception as exc:  # pragma: no cover
         raise HTTPException(status_code=503, detail=f"Database unavailable: {exc}") from exc

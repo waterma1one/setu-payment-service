@@ -338,6 +338,28 @@ async def test_discrepancy_report_includes_event_timeline(client):
 
 
 @pytest.mark.asyncio
+async def test_root_endpoint(client):
+    resp = await client.get("/")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "service" in body
+    assert "docs" in body
+
+
+@pytest.mark.asyncio
+async def test_naive_timestamp_is_accepted(client):
+    """Timestamps without timezone info should be accepted (treated as UTC)."""
+    txn_id = str(uuid.uuid4())
+    resp = await client.post("/events", json=_make_event(
+        event_type="payment_initiated",
+        transaction_id=txn_id,
+        timestamp="2026-01-10T10:00:00",  # no timezone info
+    ))
+    assert resp.status_code == 200
+    assert resp.json()["ingestion_status"] == "accepted"
+
+
+@pytest.mark.asyncio
 async def test_health_returns_connected(client):
     resp = await client.get("/health")
     assert resp.status_code == 200
@@ -346,3 +368,202 @@ async def test_health_returns_connected(client):
     assert body["database"] == "connected"
     assert "event_count" in body
     assert "transaction_count" in body
+
+
+# ── Conflict branches ────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_conflict_settled_on_initiated_transaction(client):
+    """SETTLED arriving before any payment event → conflicting_state_transition."""
+    txn_id = str(uuid.uuid4())
+    await client.post("/events", json=_make_event(
+        event_type="payment_initiated", transaction_id=txn_id,
+        timestamp="2026-01-10T10:00:00+00:00",
+    ))
+    r = await client.post("/events", json=_make_event(
+        event_type="settled", transaction_id=txn_id,
+        timestamp="2026-01-10T10:05:00+00:00",
+    ))
+    assert r.status_code == 200
+    assert r.json()["discrepancy_type"] == "conflicting_state_transition"
+
+
+@pytest.mark.asyncio
+async def test_conflict_payment_failed_after_processed(client):
+    """PAYMENT_FAILED arriving after PAYMENT_PROCESSED → conflicting_state_transition."""
+    txn_id = str(uuid.uuid4())
+    for event_type, ts in [
+        ("payment_initiated", "2026-01-10T10:00:00+00:00"),
+        ("payment_processed", "2026-01-10T10:05:00+00:00"),
+    ]:
+        await client.post("/events", json=_make_event(
+            event_type=event_type, transaction_id=txn_id, timestamp=ts
+        ))
+    r = await client.post("/events", json=_make_event(
+        event_type="payment_failed", transaction_id=txn_id,
+        timestamp="2026-01-10T10:10:00+00:00",
+    ))
+    assert r.status_code == 200
+    assert r.json()["discrepancy_type"] == "conflicting_state_transition"
+
+
+@pytest.mark.asyncio
+async def test_conflict_payment_processed_after_failed(client):
+    """PAYMENT_PROCESSED arriving after PAYMENT_FAILED → conflicting_state_transition."""
+    txn_id = str(uuid.uuid4())
+    for event_type, ts in [
+        ("payment_initiated", "2026-01-10T10:00:00+00:00"),
+        ("payment_failed", "2026-01-10T10:05:00+00:00"),
+    ]:
+        await client.post("/events", json=_make_event(
+            event_type=event_type, transaction_id=txn_id, timestamp=ts
+        ))
+    r = await client.post("/events", json=_make_event(
+        event_type="payment_processed", transaction_id=txn_id,
+        timestamp="2026-01-10T10:10:00+00:00",
+    ))
+    assert r.status_code == 200
+    assert r.json()["discrepancy_type"] == "conflicting_state_transition"
+
+
+# ── Date range filters ───────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_list_transactions_date_range_filter(client):
+    """Transactions outside the date range should be excluded."""
+    merchant_id = "merchant_date_range"
+
+    # inside range
+    txn_in = str(uuid.uuid4())
+    await client.post("/events", json=_make_event(
+        event_type="payment_initiated",
+        transaction_id=txn_in,
+        merchant_id=merchant_id,
+        merchant_name="DateRangeMerchant",
+        timestamp="2026-03-15T12:00:00+00:00",
+    ))
+
+    # outside range (too early)
+    txn_out = str(uuid.uuid4())
+    await client.post("/events", json=_make_event(
+        event_type="payment_initiated",
+        transaction_id=txn_out,
+        merchant_id=merchant_id,
+        merchant_name="DateRangeMerchant",
+        timestamp="2026-01-01T00:00:00+00:00",
+    ))
+
+    resp = await client.get(
+        f"/transactions?merchant_id={merchant_id}"
+        "&start_date=2026-03-01T00:00:00Z&end_date=2026-03-31T23:59:59Z"
+    )
+    assert resp.status_code == 200
+    ids = [t["transaction_id"] for t in resp.json()["transactions"]]
+    assert txn_in in ids
+    assert txn_out not in ids
+
+
+@pytest.mark.asyncio
+async def test_reconciliation_summary_date_range_filter(client):
+    """Summary with date range excludes out-of-range transactions."""
+    merchant_id = "merchant_summary_date"
+
+    txn_in = str(uuid.uuid4())
+    await client.post("/events", json=_make_event(
+        event_type="payment_initiated",
+        transaction_id=txn_in,
+        merchant_id=merchant_id,
+        merchant_name="SummaryDateMerchant",
+        timestamp="2026-03-15T00:00:00+00:00",
+    ))
+
+    txn_out = str(uuid.uuid4())
+    await client.post("/events", json=_make_event(
+        event_type="payment_initiated",
+        transaction_id=txn_out,
+        merchant_id=merchant_id,
+        merchant_name="SummaryDateMerchant",
+        timestamp="2026-01-01T00:00:00+00:00",
+    ))
+
+    resp = await client.get(
+        "/reconciliation/summary?group_by=merchant"
+        f"&merchant_id={merchant_id}"
+        "&start_date=2026-03-01T00:00:00Z&end_date=2026-03-31T23:59:59Z"
+    )
+    assert resp.status_code == 200
+    summaries = resp.json()["summaries"]
+    assert len(summaries) == 1
+    assert summaries[0]["transaction_count"] == 1
+
+
+# ── Reconciliation summary group_by=date ────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_reconciliation_summary_date_group(client):
+    txn_id = str(uuid.uuid4())
+    for event_type, ts in [
+        ("payment_initiated", "2026-02-10T10:00:00+00:00"),
+        ("payment_processed", "2026-02-10T10:05:00+00:00"),
+        ("settled", "2026-02-10T10:10:00+00:00"),
+    ]:
+        await client.post("/events", json=_make_event(
+            event_type=event_type, transaction_id=txn_id, timestamp=ts
+        ))
+
+    resp = await client.get("/reconciliation/summary?group_by=date")
+    assert resp.status_code == 200
+    groups = {s["group"] for s in resp.json()["summaries"]}
+    assert any("2026-02-10" in g for g in groups)
+
+
+# ── Discrepancy type filter and pagination ───────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_discrepancy_type_filter(client):
+    """?type filter returns only the requested discrepancy type."""
+    saf_txn = str(uuid.uuid4())
+    for event_type, ts in [
+        ("payment_initiated", "2026-01-10T10:00:00+00:00"),
+        ("payment_failed",    "2026-01-10T10:05:00+00:00"),
+        ("settled",           "2026-01-10T10:10:00+00:00"),
+    ]:
+        await client.post("/events", json=_make_event(
+            event_type=event_type, transaction_id=saf_txn, timestamp=ts
+        ))
+
+    resp = await client.get("/reconciliation/discrepancies?type=settled_after_failure")
+    assert resp.status_code == 200
+    body = resp.json()
+    for row in body["discrepancies"]:
+        assert row["discrepancy_type"] == "settled_after_failure"
+    assert saf_txn in [d["transaction_id"] for d in body["discrepancies"]]
+
+
+@pytest.mark.asyncio
+async def test_discrepancy_pagination(client):
+    """Pagination metadata is correct for the discrepancy endpoint."""
+    merchant_id = "merchant_disc_page"
+    for _ in range(3):
+        txn_id = str(uuid.uuid4())
+        for event_type, ts in [
+            ("payment_initiated", "2026-01-10T10:00:00+00:00"),
+            ("payment_failed",    "2026-01-10T10:05:00+00:00"),
+            ("settled",           "2026-01-10T10:10:00+00:00"),
+        ]:
+            await client.post("/events", json=_make_event(
+                event_type=event_type,
+                transaction_id=txn_id,
+                merchant_id=merchant_id,
+                merchant_name="DiscPageMerchant",
+                timestamp=ts,
+            ))
+
+    resp = await client.get(
+        f"/reconciliation/discrepancies?merchant_id={merchant_id}&per_page=2&page=1"
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["pagination"]["total"] == 3
+    assert body["pagination"]["total_pages"] == 2
+    assert len(body["discrepancies"]) == 2
