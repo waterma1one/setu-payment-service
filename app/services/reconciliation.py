@@ -21,7 +21,19 @@ from app.schemas import (
     TransactionOut,
     derive_status,
 )
-from app.services.event_ingestion import describe_discrepancy
+
+
+_DISCREPANCY_DESCRIPTIONS: dict[DiscrepancyType, str] = {
+    DiscrepancyType.PROCESSED_NOT_SETTLED: "Payment processed but not settled.",
+    DiscrepancyType.SETTLED_AFTER_FAILURE: "Settlement recorded for a failed payment.",
+    DiscrepancyType.CONFLICTING_STATE_TRANSITION: "A unique event implied a conflicting lifecycle transition.",
+}
+
+
+def describe_discrepancy(discrepancy_type: Optional[DiscrepancyType]) -> Optional[str]:
+    if discrepancy_type is None:
+        return None
+    return _DISCREPANCY_DESCRIPTIONS.get(discrepancy_type)
 
 
 STATUS_CASE = case(
@@ -40,6 +52,40 @@ STATUS_CASE = case(
     ),
     else_="initiated",
 )
+
+
+# Lifecycle-ordered integer for sort_by=status: initiated → pending → settled → failed.
+# Alphabetical ordering of the derived-string value is not meaningful, so we encode
+# an explicit progression here.
+STATUS_SORT_ORDER = case(
+    (Transaction.payment_status == PaymentStatus.INITIATED, 1),
+    (
+        (Transaction.payment_status == PaymentStatus.PROCESSED)
+        & (Transaction.settlement_status == SettlementStatus.PENDING),
+        2,
+    ),
+    (
+        (Transaction.payment_status == PaymentStatus.PROCESSED)
+        & (Transaction.settlement_status == SettlementStatus.SETTLED),
+        3,
+    ),
+    (Transaction.payment_status == PaymentStatus.FAILED, 4),
+    else_=0,
+)
+
+
+_STATUS_FILTERS = {
+    "failed": (Transaction.payment_status == PaymentStatus.FAILED,),
+    "settled": (
+        Transaction.payment_status == PaymentStatus.PROCESSED,
+        Transaction.settlement_status == SettlementStatus.SETTLED,
+    ),
+    "processed_pending_settlement": (
+        Transaction.payment_status == PaymentStatus.PROCESSED,
+        Transaction.settlement_status == SettlementStatus.PENDING,
+    ),
+    "initiated": (Transaction.payment_status == PaymentStatus.INITIATED,),
+}
 
 
 def _pagination(page: int, per_page: int, total: int) -> PaginationMeta:
@@ -76,13 +122,16 @@ async def list_transactions(
         stmt = stmt.where(Transaction.created_at <= end_date)
         count_stmt = count_stmt.where(Transaction.created_at <= end_date)
     if status:
-        stmt = stmt.where(STATUS_CASE == status)
-        count_stmt = count_stmt.where(STATUS_CASE == status)
+        # Translate the derived status back to underlying column predicates so
+        # Postgres can use idx_transactions_status_created instead of scanning.
+        for predicate in _STATUS_FILTERS[status]:
+            stmt = stmt.where(predicate)
+            count_stmt = count_stmt.where(predicate)
 
     sort_map = {
         "created_at": Transaction.created_at,
         "amount": Transaction.amount,
-        "status": STATUS_CASE,
+        "status": STATUS_SORT_ORDER,
     }
     sort_column = sort_map[sort_by]
     ordering = desc(sort_column) if sort_order == "desc" else sort_column

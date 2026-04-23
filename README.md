@@ -20,14 +20,12 @@ Reviewer-first backend service for the Setu Solutions Engineer take-home assignm
 
 ## Deployment
 
-**Live URL:** https://api-production-e564.up.railway.app
+> **Note:** The Railway free-tier deployment may be inactive. Please use the local Docker setup below, which starts the full service in one command.
 
-**Demo recording:** `ADD_LOOM_OR_YOUTUBE_URL_HERE`
-
-To deploy on Railway:
+To re-deploy on Railway:
 1. Create a new Railway project, add a PostgreSQL plugin.
 2. Push this repository; Railway uses `railway.json` automatically.
-3. `railway.json` runs `alembic upgrade head` before starting the server.
+3. The Dockerfile runs `alembic upgrade head` before starting the server.
 4. Seed sample data once:
    ```bash
    railway run python scripts/seed_sample_data.py
@@ -93,8 +91,19 @@ See `API.md` for request and response examples.
 pytest
 ```
 
-The main suite uses SQLite for fast local validation. The concurrency test requires a real
-Postgres instance and runs when `SETU_TEST_POSTGRES_URL` is set:
+The default suite runs **58 tests** across 4 files at **98% code coverage**:
+
+- `test_api.py` — core lifecycle, pagination, filters, date ranges, discrepancy reports (30 tests)
+- `test_edge_cases.py` — input validation, duplicate-with-conflict, sort, boundary values (28 tests)
+- `test_status_parity.py` — verifies Python-side and SQL-side status derivation agree on all 6 combinations
+
+**Full dataset integration test** (opt-in, ~22 seconds):
+```bash
+RUN_FULL_DATASET_TEST=1 pytest tests/test_integration_dataset.py
+```
+Seeds all 10,355 events and asserts the exact discrepancy distribution (380 + 95 + 0 = 475).
+
+The concurrency test requires a real Postgres instance:
 ```bash
 SETU_TEST_POSTGRES_URL=postgresql+asyncpg://... pytest tests/test_concurrency.py
 ```

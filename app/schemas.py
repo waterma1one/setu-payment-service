@@ -25,11 +25,11 @@ def derive_status(
 class EventIn(BaseModel):
     model_config = ConfigDict(use_enum_values=True)
 
-    event_id: str
+    event_id: str = Field(min_length=1, max_length=64)
     event_type: EventType
-    transaction_id: str
-    merchant_id: str
-    merchant_name: str
+    transaction_id: str = Field(min_length=1, max_length=64)
+    merchant_id: str = Field(min_length=1, max_length=64)
+    merchant_name: str = Field(min_length=1, max_length=255)
     amount: Decimal = Field(gt=0)
     currency: str = Field(min_length=3, max_length=3)
     timestamp: datetime
@@ -53,7 +53,7 @@ class EventIn(BaseModel):
 
 
 class EventIngestionResponse(BaseModel):
-    ingestion_status: Literal["accepted", "duplicate"]
+    ingestion_status: Literal["accepted", "duplicate", "duplicate_with_conflict"]
     transaction_id: str
     payment_status: PaymentStatus
     settlement_status: SettlementStatus

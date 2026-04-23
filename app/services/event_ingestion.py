@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -17,6 +18,8 @@ from app.models import (
 )
 from app.schemas import EventIn, EventIngestionResponse, derive_status
 
+logger = logging.getLogger(__name__)
+
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
@@ -26,15 +29,6 @@ def _ensure_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc)
-
-
-def describe_discrepancy(discrepancy_type: Optional[DiscrepancyType]) -> Optional[str]:
-    mapping = {
-        DiscrepancyType.PROCESSED_NOT_SETTLED: "Payment processed but not settled.",
-        DiscrepancyType.SETTLED_AFTER_FAILURE: "Settlement recorded for a failed payment.",
-        DiscrepancyType.CONFLICTING_STATE_TRANSITION: "A unique event implied a conflicting lifecycle transition.",
-    }
-    return mapping.get(discrepancy_type)
 
 
 def recompute_discrepancy(
@@ -98,7 +92,9 @@ async def ingest_event(session: AsyncSession, payload: EventIn) -> EventIngestio
                     updated_at=now,
                 )
                 session.add(merchant)
-            else:
+            elif merchant.merchant_name != payload.merchant_name:
+                # Only write on actual change. Avoids per-event row writes for
+                # a rarely-mutating table.
                 merchant.merchant_name = payload.merchant_name
                 merchant.updated_at = now
 
@@ -190,11 +186,25 @@ async def ingest_event(session: AsyncSession, payload: EventIn) -> EventIngestio
             await session.flush()
     except IntegrityError:
         await session.rollback()
+        stored_event = await session.get(Event, payload.event_id)
         transaction = await session.get(Transaction, payload.transaction_id)
-        if transaction is None:  # pragma: no cover
+        if transaction is None or stored_event is None:  # pragma: no cover
+            # IntegrityError from a constraint other than the event_id PK — surface it.
             raise
+
+        conflict_fields = _payload_conflict_fields(stored_event, payload, payload_timestamp)
+        if conflict_fields:
+            logger.warning(
+                "Duplicate event_id=%s submitted with mismatched fields: %s",
+                payload.event_id,
+                ",".join(conflict_fields),
+            )
+            ingestion_status = "duplicate_with_conflict"
+        else:
+            ingestion_status = "duplicate"
+
         return EventIngestionResponse(
-            ingestion_status="duplicate",
+            ingestion_status=ingestion_status,
             transaction_id=transaction.transaction_id,
             payment_status=transaction.payment_status,
             settlement_status=transaction.settlement_status,
@@ -203,3 +213,27 @@ async def ingest_event(session: AsyncSession, payload: EventIn) -> EventIngestio
         )
 
     return await get_transaction_snapshot(session, payload.transaction_id)
+
+
+def _payload_conflict_fields(
+    stored: Event, payload: EventIn, payload_timestamp: datetime
+) -> list[str]:
+    """Return the list of fields where a re-submitted event diverges from the stored one.
+
+    Idempotency is by `event_id` alone, so we still return "duplicate" semantics, but a
+    mismatched payload is a data-integrity signal we surface to callers and logs.
+    """
+    mismatches: list[str] = []
+    if stored.event_type != payload.event_type:
+        mismatches.append("event_type")
+    if stored.transaction_id != payload.transaction_id:
+        mismatches.append("transaction_id")
+    if stored.merchant_id != payload.merchant_id:
+        mismatches.append("merchant_id")
+    if stored.amount != payload.amount:
+        mismatches.append("amount")
+    if stored.currency != payload.currency:
+        mismatches.append("currency")
+    if _ensure_utc(stored.event_timestamp) != payload_timestamp:
+        mismatches.append("timestamp")
+    return mismatches

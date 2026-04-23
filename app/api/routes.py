@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from typing import Optional
 
@@ -7,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
 from app.models import Event, Transaction
+
+logger = logging.getLogger(__name__)
 from app.schemas import (
     EventIn,
     EventIngestionResponse,
@@ -124,4 +127,7 @@ async def health(session: AsyncSession = Depends(get_session)) -> HealthResponse
             transaction_count=transaction_count,
         )
     except Exception as exc:  # pragma: no cover
-        raise HTTPException(status_code=503, detail=f"Database unavailable: {exc}") from exc
+        # Log internally; do not echo the driver exception (which may include
+        # the DSN / credentials) to the client.
+        logger.exception("Health check failed: database unavailable")
+        raise HTTPException(status_code=503, detail="Database unavailable") from exc

@@ -1,9 +1,11 @@
 # API Contract
 
 ## POST /events
-Ingest a payment lifecycle event. Idempotent: re-sending the same `event_id` returns `"duplicate"` with no state mutation.
+Ingest a payment lifecycle event. Idempotent: re-sending the same `event_id` returns `"duplicate"` with no state mutation. If the re-submitted payload differs from the stored event in any field, the response is `"duplicate_with_conflict"` and a warning is logged.
 
 **Validation rules:**
+- `event_id`, `transaction_id`, `merchant_id`: 1–64 characters
+- `merchant_name`: 1–255 characters
 - `amount` must be greater than zero
 - `currency` must be exactly 3 characters (normalised to uppercase)
 - `event_type` must be one of: `payment_initiated`, `payment_processed`, `payment_failed`, `settled`
@@ -39,6 +41,18 @@ Duplicate response (same `event_id`, no state change):
 ```json
 {
   "ingestion_status": "duplicate",
+  "transaction_id": "2f86e94c-239c-4302-9874-75f28e3474ee",
+  "payment_status": "initiated",
+  "settlement_status": "pending",
+  "status": "initiated",
+  "discrepancy_type": null
+}
+```
+
+Duplicate-with-conflict (same `event_id`, but resubmitted payload differs — e.g. mutated `amount`):
+```json
+{
+  "ingestion_status": "duplicate_with_conflict",
   "transaction_id": "2f86e94c-239c-4302-9874-75f28e3474ee",
   "payment_status": "initiated",
   "settlement_status": "pending",
@@ -212,3 +226,39 @@ into a specific type.
 ```
 
 Returns `503` if the database is unreachable.
+
+## Error Responses
+
+All error responses share FastAPI's default `{"detail": ...}` shape.
+
+Validation error (`422 Unprocessable Entity`):
+```json
+{
+  "detail": [
+    {
+      "type": "greater_than",
+      "loc": ["body", "amount"],
+      "msg": "Input should be greater than 0",
+      "input": -100.0,
+      "ctx": {"gt": 0}
+    }
+  ]
+}
+```
+
+Not found (`404 Not Found`):
+```json
+{
+  "detail": "Transaction not found"
+}
+```
+
+Database unavailable (`503 Service Unavailable`):
+```json
+{
+  "detail": "Database unavailable"
+}
+```
+
+The 503 body deliberately does not echo driver-level exception text (which may contain the DSN). Details are logged server-side instead.
+

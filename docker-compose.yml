@@ -26,9 +26,9 @@ services:
         condition: service_healthy
     ports:
       - "8000:8000"
-    command: >
-      sh -c "alembic upgrade head &&
-             uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    restart: unless-stopped
+    # Use the same start script as the Dockerfile CMD for consistency.
+    command: ["/app/scripts/start.sh"]
 
 volumes:
   postgres_data:
