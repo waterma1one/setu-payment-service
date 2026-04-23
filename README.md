@@ -22,6 +22,8 @@ Reviewer-first backend service for the Setu Solutions Engineer take-home assignm
 
 **Live URL:** https://api-production-e564.up.railway.app
 
+**Demo recording:** https://www.loom.com/share/1b0c5b0f32dd4640b634c5d5071ca559
+
 To re-deploy on Railway:
 1. Create a new Railway project, add a PostgreSQL plugin.
 2. Push this repository; Railway uses `railway.json` automatically.
