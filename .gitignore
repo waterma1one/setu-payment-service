@@ -1,17 +1,23 @@
-.venv/
+# Python
 __pycache__/
 *.pyc
-.pytest_cache/
-.mypy_cache/
-.DS_Store
-.env
 *.egg-info/
-alembic/versions/__pycache__/
-sample_events_source.json
+.venv/
+
+# Testing & Coverage
+.pytest_cache/
 .coverage
 htmlcov/
 coverage.json
 coverage.xml
 *.cover
-*,cover
+
+# IDE & OS
+.DS_Store
+.mypy_cache/
+
+# Secrets
+.env
+
+# Tools
 .claude/
