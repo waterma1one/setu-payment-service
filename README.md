@@ -20,7 +20,7 @@ Reviewer-first backend service for the Setu Solutions Engineer take-home assignm
 
 ## Deployment
 
-> **Note:** The Railway free-tier deployment may be inactive. Please use the local Docker setup below, which starts the full service in one command.
+**Live URL:** https://api-production-e564.up.railway.app
 
 To re-deploy on Railway:
 1. Create a new Railway project, add a PostgreSQL plugin.
