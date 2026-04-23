@@ -20,7 +20,7 @@ Reviewer-first backend service for the Setu Solutions Engineer take-home assignm
 
 ## Deployment
 
-**Live URL:** https://api-production-e564.up.railway.app
+**Live URL:** https://api-production-e564.up.railway.app/docs
 
 **Demo recording:** https://www.loom.com/share/1b0c5b0f32dd4640b634c5d5071ca559
 
